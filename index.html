@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ứng dụng tính toán cắt Rail tối ưu</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+    <style>
+        .custom-shadow {
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .input-group {
+            transition: all 0.3s ease;
+        }
+        .input-group:hover {
+            transform: translateY(-2px);
+        }
+        .btn {
+            transition: all 0.3s ease;
+        }
+        .btn:hover {
+            transform: scale(1.05);
+        }
+        .result-card {
+            border-radius: 8px;
+            background: linear-gradient(145deg, #f3f4f6, #ffffff);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="container mx-auto p-4 max-w-4xl">
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <h1 class="text-3xl font-bold text-gray-800 mb-6 text-center">
+                Ứng dụng tính toán cắt Rail tối ưu
+            </h1>
+
+            <div class="mb-6">
+                <label class="block text-gray-700 text-sm font-bold mb-2" for="steel-length">
+                    Chiều dài cây Rail (mm)
+                </label>
+                <input 
+                    type="number" 
+                    id="steel-length" 
+                    class="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200"
+                    placeholder="Nhập chiều dài Rail">
+            </div>
+
+            <div class="mb-6">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">Danh sách cắt</h2>
+                <div id="cuts-container">
+                    <!-- Cut sections will be added here -->
+                </div>
+                <button 
+                    onclick="addCutSection()" 
+                    class="btn bg-green-500 text-white px-4 py-2 rounded-lg mt-4 hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500">
+                    + Thêm chiều dài cắt
+                </button>
+            </div>
+
+            <div class="flex space-x-4 mb-6">
+                <button 
+                    onclick="calculate()" 
+                    class="btn flex-1 bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    Tính toán
+                </button>
+                <button 
+                    onclick="saveScenario()" 
+                    class="btn bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500">
+                    Lưu kịch bản
+                </button>
+                <button 
+                    onclick="reset()" 
+                    class="btn bg-red-500 text-white px-6 py-3 rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500">
+                    Reset
+                </button>
+            </div>
+
+            <!-- Phần so sánh kịch bản -->
+            <div id="scenarios-comparison" class="mb-6 hidden">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">So sánh kịch bản</h2>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full bg-white rounded-lg overflow-hidden">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="px-4 py-2 text-left">Tên kịch bản</th>
+                                <th class="px-4 py-2 text-left">Số lượng Rail</th>
+                                <th class="px-4 py-2 text-left">Tổng phần thừa</th>
+                                <th class="px-4 py-2 text-left">Hiệu suất</th>
+                                <th class="px-4 py-2 text-left">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scenarios-table">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="results" class="hidden">
+                <div class="result-card p-6 mb-4">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">Kết quả tính toán</h3>
+                    <p class="text-lg mb-2">Số lượng cây Rail cần cắt: <span id="steel-needed" class="font-bold text-blue-600">0</span></p>
+                </div>
+
+                <div class="result-card p-6 mb-4">
+                    <h3 class="text-lg font-bold text-gray-800 mb-3">Các đoạn Rail thừa có thể tái sử dụng:</h3>
+                    <ul id="remaining-pieces" class="list-disc pl-5 space-y-2">
+                    </ul>
+                </div>
+
+                <div class="result-card p-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-3">Thống kê chi tiết:</h3>
+                    <div class="space-y-2">
+                        <p>Tổng chiều dài Rail sử dụng: <span id="total-used" class="font-bold text-blue-600">0</span> mm</p>
+                        <p>Tổng chiều dài cần cắt: <span id="total-needed" class="font-bold text-green-600">0</span> mm</p>
+                        <p>Tổng chiều dài Rail thừa: <span id="total-waste" class="font-bold text-red-600">0</span> mm</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let cuts = [{ length: 0, quantity: 0 }];
+        let scenarios = [];
+        
+        class CuttingScenario {
+            constructor(name, steelLength, cuts, results) {
+                this.id = Date.now();
+                this.name = name;
+                this.steelLength = steelLength;
+                this.cuts = [...cuts];
+                this.results = results;
+                this.timestamp = new Date();
+            }
+        }
+
+        function createCutSection(index) {
+            const section = document.createElement('div');
+            section.className = 'input-group flex space-x-4 mb-4 p-4 bg-gray-50 rounded-lg custom-shadow';
+            section.innerHTML = `
+                <div class="flex-1">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">
+                        Chiều dài cắt (mm)
+                    </label>
+                    <input 
+                        type="number" 
+                        class="cut-length w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value="${cuts[index]?.length || 0}"
+                        onchange="updateCut(${index}, 'length', this.value)">
+                </div>
+                <div class="flex-1">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">
+                        Số lượng cắt
+                    </label>
+                    <input 
+                        type="number" 
+                        class="cut-quantity w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value="${cuts[index]?.quantity || 0}"
+                        onchange="updateCut(${index}, 'quantity', this.value)">
+                </div>
+            `;
+            return section;
+        }
+
+        function updateCut(index, field, value) {
+            cuts[index] = cuts[index] || {};
+            cuts[index][field] = Number(value);
+        }
+
+        function addCutSection() {
+            cuts.push({ length: 0, quantity: 0 });
+            const container = document.getElementById('cuts-container');
+            container.appendChild(createCutSection(cuts.length - 1));
+        }
+
+        function reset() {
+            cuts = [{ length: 0, quantity: 0 }];
+            document.getElementById('steel-length').value = '';
+            document.getElementById('cuts-container').innerHTML = '';
+            document.getElementById('cuts-container').appendChild(createCutSection(0));
+            document.getElementById('results').classList.add('hidden');
+        }
+
+        function saveScenario() {
+            const steelLength = Number(document.getElementById('steel-length').value);
+            if (!steelLength || !document.getElementById('results').classList.contains('visible')) {
+                alert('Vui lòng tính toán trước khi lưu kịch bản!');
+                return;
+            }
+
+            const name = prompt('Nhập tên cho kịch bản:', `Kịch bản ${scenarios.length + 1}`);
+            if (!name) return;
+
+            const results = {
+                steelNeeded: Number(document.getElementById('steel-needed').textContent),
+                totalUsed: Number(document.getElementById('total-used').textContent),
+                totalNeeded: Number(document.getElementById('total-needed').textContent),
+                totalWaste: Number(document.getElementById('total-waste').textContent),
+            };
+
+            const scenario = new CuttingScenario(name, steelLength, cuts, results);
+            scenarios.push(scenario);
+            updateScenariosComparison();
+        }
+
+        function updateScenariosComparison() {
+            const container = document.getElementById('scenarios-comparison');
+            const tableBody = document.getElementById('scenarios-table');
+            
+            if (scenarios.length > 0) {
+                container.classList.remove('hidden');
+                tableBody.innerHTML = '';
+                
+                scenarios.forEach(scenario => {
+                    const efficiency = ((scenario.results.totalNeeded / scenario.results.totalUsed) * 100).toFixed(2);
+                    
+                    const row = document.createElement('tr');
+                    row.className = 'border-t';
+                    row.innerHTML = `
+                        <td class="px-4 py-2">${scenario.name}</td>
+                        <td class="px-4 py-2">${scenario.results.steelNeeded}</td>
+                        <td class="px-4 py-2">${scenario.results.totalWaste}mm</td>
+                        <td class="px-4 py-2">${efficiency}%</td>
+                        <td class="px-4 py-2">
+                            <button onclick="loadScenario(${scenario.id})" 
+                                class="text-blue-500 hover:text-blue-700 mr-2">
+                                Tải lại
+                            </button>
+                            <button onclick="deleteScenario(${scenario.id})" 
+                                class="text-red-500 hover:text-red-700">
+                                Xóa
+                            </button>
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+            } else {
+                container.classList.add('hidden');
+            }
+        }
+
+        function loadScenario(id) {
+            const scenario = scenarios.find(s => s.id === id);
+            if (!scenario) return;
+
+            document.getElementById('steel-length').value = scenario.steelLength;
+            cuts = [...scenario.cuts];
+            
+            const container = document.getElementById('cuts-container');
+            container.innerHTML = '';
+            cuts.forEach((_, index) => {
+                container.appendChild(createCutSection(index));
+            });
+
+            calculate();
+        }
+
+        function deleteScenario(id) {
+            if (!confirm('Bạn có chắc muốn xóa kịch bản này?')) return;
+            
+            const index = scenarios.findIndex(s => s.id === id);
+            if (index > -1) {
+                scenarios.splice(index, 1);
+                updateScenariosComparison();
+            }
+        }
+
+        function calculate() {
+            const steelLength = Number(document.getElementById('steel-length').value);
+            if (!steelLength) {
+                alert('Vui lòng nhập chiều dài Rail!');
+                return;
+            }
+
+            const validCuts = cuts.filter(cut => cut.length > 0 && cut.quantity > 0);
+            const sortedCuts = validCuts.flatMap(cut => Array(cut.quantity).fill(cut.length)).sort((a, b) => b - a);
+
+            let steelBars = [];
+            let remaining = [];
+
+            for (let cut of sortedCuts) {
+                let usedRemaining = false;
+                for (let i = 0; i < remaining.length; i++) {
+                    if (remaining[i] >= cut) {
+                        remaining[i] -= cut;
+                        if (remaining[i] > 0) {
+                            remaining[i] = Math.round(remaining[i] * 100) / 100;
+                        } else {
+                            remaining.splice(i, 1);
+                        }
+                        usedRemaining = true;
+                        break;
+                    }
+                }
+
+                if (!usedRemaining) {
+                    steelBars.push([]);
+                    let newRemaining = steelLength - cut;
+                    if (newRemaining > 0) {
+                        remaining.push(newRemaining);
+                    }
+                }
+            }
+
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.classList.remove('hidden');
+            resultsDiv.classList.add('visible');
+            document.getElementById('steel-needed').textContent = steelBars.length;
+
+            const remainingList = document.getElementById('remaining-pieces');
+            remainingList.innerHTML = '';
+            if (remaining.length > 0) {
+                remaining.sort((a, b) => b - a);
+                remaining.forEach((piece, index) => {
+                    const li = document.createElement('li');
+                    li.textContent = `đoạn ${index + 1}: ${piece} mm`;
+                    li.className = 'text-gray-700';
+                    remainingList.appendChild(li);
+                });
+            } else {
+                const li = document.createElement('li');
+                li.textContent = 'Không có đoạn thừa có thể tái sử dụng';
+                li.className = 'text-gray-500 italic';
+                remainingList.appendChild(li);
+            }
+
+            const totalUsed = steelBars.length * steelLength;
+            const totalNeeded = sortedCuts.reduce((sum, cut) => sum + cut, 0);
+            const totalWaste = totalUsed - totalNeeded;
+
+            document.getElementById('total-used').textContent = totalUsed;
+            document.getElementById('total-needed').textContent = totalNeeded;
+            document.getElementById('total-waste').textContent = totalWaste;
+        }
+
+        document.getElementById('cuts-container').appendChild(createCutSection(0));
+    </script>
+</body>
+</html>
